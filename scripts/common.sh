@@ -48,7 +48,7 @@ fetch() {
       # which is how ffmpeg.org fails, and the image's curl predates
       # --retry-all-errors.
       for attempt in 1 2 3 4 5; do
-        curl -fsSL --connect-timeout 30 -o "$tarball.part" "$url" >&2 && break
+        curl -fsSL --connect-timeout 30 --max-time 600 -o "$tarball.part" "$url" >&2 && break
         (( attempt < 5 )) || die "$name: download failed: $url"
         sleep $((attempt * 10))
       done

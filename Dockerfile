@@ -4,7 +4,10 @@
 # pinned in sources.lock.
 FROM almalinux:8@sha256:2d0f2eb2a83cc09dbc2eb92fade4dbe8f709628149e81aa00aec70630406603b
 
-RUN dnf -y install dnf-plugins-core \
+# A stalled mirror otherwise holds a CI build for many minutes: give up on one
+# slower than 100 kB/s for 30 s and try the next.
+RUN printf '%s\n' fastestmirror=1 minrate=100k timeout=30 retries=10 >> /etc/dnf/dnf.conf \
+ && dnf -y install dnf-plugins-core \
  && dnf config-manager --set-enabled powertools \
  && dnf -y install \
       gcc-toolset-15-gcc gcc-toolset-15-gcc-c++ gcc-toolset-15-binutils \
