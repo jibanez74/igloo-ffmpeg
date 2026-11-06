@@ -1,7 +1,7 @@
 # Toolchain for Igloo's Linux x64 FFmpeg build. AlmaLinux 8 gives a glibc 2.28
-# runtime baseline (the same as Jellyfin's portable builds); gcc-toolset-15 and
-# clang (CUDA kernels to PTX) come from AppStream. scripts/build-linux.sh does
-# the actual work against sources pinned in sources.lock.
+# runtime baseline; gcc-toolset-15 and clang (CUDA kernels to PTX) come from
+# AppStream. scripts/build-linux.sh does the actual work against sources
+# pinned in sources.lock.
 FROM almalinux:8@sha256:2d0f2eb2a83cc09dbc2eb92fade4dbe8f709628149e81aa00aec70630406603b
 
 RUN dnf -y install dnf-plugins-core \
