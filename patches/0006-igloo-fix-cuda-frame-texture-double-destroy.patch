@@ -1,0 +1,38 @@
+Igloo's fix for the CUDA frame helper that tonemap_cuda uses (patch 0004).
+Applies on top of 0002-0005; FFmpeg code under the LGPL, like the files it patches.
+
+- ff_make_cuda_frame destroyed the textures it had created when a later
+  texture failed, but left their handles in the frame, so run_kernel's own
+  cleanup destroyed them a second time. The handles are now cleared, and
+  run_kernel starts from zeroed frames.
+
+Index: FFmpeg/libavfilter/cuda/host_util.c
+===================================================================
+--- FFmpeg.orig/libavfilter/cuda/host_util.c
++++ FFmpeg/libavfilter/cuda/host_util.c
+@@ -66,9 +66,11 @@
+     return ret;
+ 
+ fail:
+-    for (i = 0; i < dst->planes; i++)
++    for (i = 0; i < dst->planes; i++) {
+         if (dst->tex[i])
+             CHECK_CU(cu->cuTexObjectDestroy(dst->tex[i]));
++        dst->tex[i] = 0;
++    }
+ 
+     return ret;
+ }
+Index: FFmpeg/libavfilter/vf_tonemap_cuda.c
+===================================================================
+--- FFmpeg.orig/libavfilter/vf_tonemap_cuda.c
++++ FFmpeg/libavfilter/vf_tonemap_cuda.c
+@@ -975,7 +975,7 @@
+ {
+     TonemapCUDAContext *s = ctx->priv;
+     CudaFunctions *cu = s->hwctx->internal->cuda_dl;
+-    FFCUDAFrame src, dst;
++    FFCUDAFrame src = { 0 }, dst = { 0 };
+     void *args[] = { &src, &dst, &s->dither_tex, &s->dovi_buffer };
+     void *args2[] = { &src, &dst, &s->lut_buffer, &s->dovi_buffer };
+     int ret, pq_out = s->out_trc == AVCOL_TRC_SMPTE2084;
