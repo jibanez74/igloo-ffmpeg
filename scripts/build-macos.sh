@@ -10,6 +10,9 @@ set -euo pipefail
 
 B=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 PLATFORM=darwin_arm64
+# The dependencies' build systems split CFLAGS and LDFLAGS on spaces, so the
+# -I and -L paths into the work tree must not contain any.
+[[ $B != *[[:space:]]* ]] || { echo "build-macos.sh: move the checkout to a path without spaces: $B" >&2; exit 1; }
 [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || { echo "build-macos.sh runs on an Apple Silicon Mac" >&2; exit 1; }
 
 # The oldest macOS the binaries run on: the same floor as the Jellyfin build
@@ -26,6 +29,13 @@ source "$B/scripts/common.sh"
 export CFLAGS="-I$PREFIX/include $CFLAGS"
 export CXXFLAGS=$CFLAGS
 export LDFLAGS="-L$PREFIX/lib $LDFLAGS"
+
+# Xcode's clang and SDK build the dependencies: a new Xcode rebuilds them.
+toolchain_id() {
+  clang --version | head -1
+  xcrun --show-sdk-path
+  xcrun --show-sdk-build-version
+}
 
 build_deps zlib x264 zimg dav1d
 

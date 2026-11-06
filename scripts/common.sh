@@ -44,7 +44,8 @@ fetch() {
   if [[ $kind == tar ]]; then
     tarball=$CACHE/$(basename "$url")
     if [[ ! -f $tarball ]]; then
-      curl -fsSL --retry 3 -o "$tarball.part" "$url" >&2
+      # --retry alone skips connection failures, which is how ffmpeg.org fails.
+      curl -fsSL --connect-timeout 30 --retry 5 --retry-all-errors -o "$tarball.part" "$url" >&2
       mv "$tarball.part" "$tarball"
     fi
     [[ $(sha256 "$tarball" | cut -d' ' -f1) == "$sha" ]] || die "$name: sha256 mismatch for $tarball"
@@ -79,13 +80,15 @@ unpack() {
 }
 
 # stamp_key <name>: a digest of everything a dependency's build depends on: its
-# source ref, its build function and the shared flags, plus whatever the
-# platform's stamp_extra adds. Changing any of them rebuilds the dependency.
+# source ref, its build function, the shared flags and the platform's
+# toolchain_id, plus whatever the platform's stamp_extra adds. Changing any of
+# them rebuilds the dependency.
 stamp_key() {
   {
     lock_field "$1" 3
     declare -f "build_$1" || true
     echo "$CFLAGS|$CXXFLAGS|$LDFLAGS"
+    toolchain_id
     if declare -F stamp_extra > /dev/null; then stamp_extra "$1"; fi
   } | sha256 | cut -d' ' -f1
 }

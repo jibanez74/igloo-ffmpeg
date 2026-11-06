@@ -109,7 +109,7 @@ jobs:
         run: |
           ref=$RUNNER_TEMP/reference
           mkdir "$ref"
-          curl -fsSL --retry 3 "$REFERENCE_URL" | tar -xJf - -C "$ref"
+          curl -fsSL --connect-timeout 30 --retry 5 --retry-all-errors "$REFERENCE_URL" | tar -xJf - -C "$ref"
           [[ $(shasum -a 256 "$ref/ffprobe" | cut -d' ' -f1) == "$REFERENCE_FFPROBE_SHA256" ]]
           verify/make-fixtures.sh out/darwin_arm64/ffmpeg "$RUNNER_TEMP/fixtures"
           python3 -I verify/ffprobe-parity.py "$ref/ffprobe" out/darwin_arm64/ffprobe \
@@ -131,8 +131,10 @@ jobs:
             -f lavfi -i testsrc2=s=256x144:d=0.1 -frames:v 1 \
             -vf setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,format=p010le,hwupload,scale_vt=w=-2:h=144:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709 \
             -c:v h264_videotoolbox -profile:v high -f null - && echo "scale_vt HDR chain: works"
-          "$out/ffmpeg" -hide_banner -v error -hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld \
-            -i "$RUNNER_TEMP/smoke.mp4" -f null - \
+          # A failed hwaccel falls back to software and still exits 0, so the
+          # decoder's own report of the format it chose is the evidence.
+          "$out/ffmpeg" -hide_banner -v debug -hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld \
+            -i "$RUNNER_TEMP/smoke.mp4" -f null - 2>&1 | grep -q 'Format videotoolbox_vld chosen by get_format' \
             && echo "videotoolbox decode: works"
 
       - name: Stage release files

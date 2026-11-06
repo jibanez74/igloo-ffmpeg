@@ -19,6 +19,13 @@ export LDFLAGS="-L$PREFIX/lib $LDFLAGS"
 # resolves statically, so the binaries need no libstdc++.so or libgcc_s.
 ln -sf "$(g++ -print-file-name=libstdc++.a)" "$PREFIX/lib/libstdc++.a"
 
+# The compilers that build the dependencies; the image digest covers the rest.
+toolchain_id() {
+  grep -m1 '^FROM ' "$B/Dockerfile"
+  gcc --version | head -1
+  clang --version | head -1
+}
+
 # The stubbed libdrm and libva also depend on gen_implib and Implib.so's ref.
 stamp_extra() {
   if [[ $1 == libdrm || $1 == libva ]]; then
