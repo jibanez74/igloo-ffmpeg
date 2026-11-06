@@ -5,12 +5,15 @@
 # ffmpeg_seek_landing,capabilities}.go, helpers/hls_*profiles.go, the
 # *_externalbin_test.go fixtures, the ffmpeg CLI's own defaults, and the
 # testdata READMEs' fixture recipes. The encoder, muxer and filter lists in
-# scripts/build-linux.sh are allowlists: keep both files in step.
+# scripts/common.sh (and each platform's additions in scripts/build-*.sh) are
+# allowlists: keep both files in step. A trailing linux or darwin limits a
+# line to that platform's build.
 
 # Video encoding (libx264 is never capability-checked, so it is mandatory)
 encoder libx264
-encoder h264_nvenc
-encoder h264_qsv
+encoder h264_nvenc linux
+encoder h264_qsv linux
+encoder h264_videotoolbox darwin
 # Audio: default stereo AAC, explicit Dolby profiles
 encoder aac
 encoder ac3
@@ -107,9 +110,10 @@ filter zscale
 filter tonemap
 filter aresample
 filter hwupload
-filter scale_cuda
-filter tonemap_cuda
-filter scale_qsv
+filter scale_cuda linux
+filter tonemap_cuda linux
+filter scale_qsv linux
+filter scale_vt darwin
 filter testsrc2
 # Inserted by the ffmpeg CLI (autorotate, accurate seek, format negotiation)
 filter null
@@ -135,9 +139,10 @@ filter setfield
 filter crop
 filter silencedetect
 
-hwaccel cuda
-hwaccel qsv
-hwaccel vaapi
+hwaccel cuda linux
+hwaccel qsv linux
+hwaccel vaapi linux
+hwaccel videotoolbox darwin
 
 protocol file
 protocol pipe
