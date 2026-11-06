@@ -31,10 +31,11 @@ build_deps zlib x264 zimg dav1d
 
 # VideoToolbox: the videotoolbox hwaccel, h264_videotoolbox and scale_vt.
 # zimg's C++ runtime is the system libc++. Only the system libraries and
-# frameworks stay dynamic.
+# frameworks stay dynamic. macOS keeps iconv in libiconv, not libSystem, and
+# configure's iconv check does not add it to the link.
 ENCODERS+=(h264_videotoolbox)
 FILTERS+=(scale_vt)
-build_ffmpeg --cc=clang --cxx=clang++ --enable-videotoolbox
+build_ffmpeg --cc=clang --cxx=clang++ --extra-libs=-liconv --enable-videotoolbox
 
 # strip (run by FFmpeg's install of ffmpeg and ffprobe) can leave the linker's
 # ad-hoc signature stale, and Apple Silicon refuses to run unsigned code.
