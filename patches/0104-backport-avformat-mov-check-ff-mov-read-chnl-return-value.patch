@@ -1,0 +1,30 @@
+From 46d899d7a02bc63237472cc4897258d5ddf274ac Mon Sep 17 00:00:00 2001
+From: James Almer <jamrial@gmail.com>
+Date: Sun, 11 Oct 2026 11:07:34 -0300
+Subject: [PATCH] avformat/mov: check ff_mov_read_chnl return value
+
+Fixes use of uninitialized value.
+Fixes issue #24960.
+
+Signed-off-by: James Almer <jamrial@gmail.com>
+---
+ libavformat/mov.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/libavformat/mov.c b/libavformat/mov.c
+index e998a01ef2579..29414559378c7 100644
+--- a/libavformat/mov.c
++++ b/libavformat/mov.c
+@@ -1243,7 +1243,11 @@ static int mov_read_chnl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+         return 0;
+     }
+ 
+-    ff_mov_read_chnl(c->fc, pb, st);
++    ret = ff_mov_read_chnl(c->fc, pb, st);
++    if (ret < 0) {
++        avio_seek(pb, end, SEEK_SET);
++        return 0;
++    }
+ 
+     if (avio_tell(pb) != end) {
+         av_log(c->fc, AV_LOG_WARNING, "skip %" PRId64 " bytes of unknown data inside chnl\n",
