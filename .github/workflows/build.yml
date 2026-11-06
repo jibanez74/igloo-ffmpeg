@@ -116,8 +116,10 @@ jobs:
             "$RUNNER_TEMP/parity.json" "$RUNNER_TEMP/fixtures"
           cat "$RUNNER_TEMP/parity.json"
 
-      # GitHub's macOS runners are virtual machines, which may not expose the
-      # hardware encoder, so this step only reports what it finds.
+      # GitHub's macOS runners are virtual machines, which may not expose
+      # VideoToolbox the way a Mac does, so this step only reports what it
+      # finds: H.264 encode, Igloo's Apple HDR capability probe
+      # (probeAppleVTTonemap in capabilities.go), and hwaccel decode.
       - name: VideoToolbox (informational)
         continue-on-error: true
         run: |
@@ -125,6 +127,12 @@ jobs:
           "$out/ffmpeg" -hide_banner -hwaccels
           "$out/ffmpeg" -hide_banner -v error -f lavfi -i testsrc2=s=320x240:d=1 \
             -c:v h264_videotoolbox -f null - && echo "h264_videotoolbox: encodes"
+          "$out/ffmpeg" -hide_banner -v error -init_hw_device videotoolbox=igloo_vt -filter_hw_device igloo_vt \
+            -f lavfi -i testsrc2=s=256x144:d=0.1 -frames:v 1 \
+            -vf setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,format=p010le,hwupload,scale_vt=w=-2:h=144:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709 \
+            -c:v h264_videotoolbox -profile:v high -f null - && echo "scale_vt HDR chain: works"
+          "$out/ffmpeg" -hide_banner -v error -hwaccel videotoolbox -i "$RUNNER_TEMP/smoke.mp4" -f null - \
+            && echo "videotoolbox decode: works"
 
       - name: Stage release files
         run: |
