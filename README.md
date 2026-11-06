@@ -27,7 +27,7 @@ The build writes `out/<platform>/` with these files:
 
 The Linux build also writes `out/igloo-ffmpeg-<version>-sources.tar`. That file is the GPL corresponding source for both platforms, which build from the same sources and patches: every source tarball, the patches and this recipe. `cache/`, `work/` and `out/` are gitignored.
 
-The Linux build is reproducible: a clean build on a workstation and one on a GitHub runner gave byte-identical binaries. (`media-8.1.3-igloo.1` did not, because x264 embedded its OpenCL kernels in directory-listing order; x264 is now built without OpenCL.) The macOS build pins Xcode in the workflow, writes static archives without timestamps (`ZERO_AR_DATE`) and signs ad hoc, which carries no timestamp.
+The Linux build is reproducible: a clean build on a workstation and one on a GitHub runner gave byte-identical binaries. (`media-8.1.3-igloo.1` did not, because x264 embedded its OpenCL kernels in directory-listing order; x264 is now built without OpenCL.) The macOS build is reproducible on the same runner image: it pins Xcode in the workflow, writes static archives without timestamps (`ZERO_AR_DATE`) and signs ad hoc, which carries no timestamp, and two workflow runs gave byte-identical binaries.
 
 ## Release
 
@@ -117,7 +117,7 @@ python3 -I verify/ffprobe-parity.py <reference ffprobe> out/linux_amd64/ffprobe 
 - `check-linkage.sh` fails when a Linux binary links anything outside glibc or needs a glibc newer than 2.28. `check-linkage-macos.sh` fails when a macOS binary is not arm64-only, links anything outside the system's libraries and frameworks, needs a macOS newer than 12.0, or has an invalid signature.
 - `nvidia-parity.sh` runs on a host with an NVIDIA GPU. It runs Igloo's NVENC and CUDA capability probes, then times its SDR (`scale_cuda`) and HDR (`tonemap_cuda`) session chains with both builds and samples each one's picture. It stops if NVENC does not open, and it skips the benchmarks while NVENC is in use.
 
-**macOS hardware paths are not verified by this repository.** GitHub's macOS runners are virtual machines, so the workflow checks the macOS build's components, linkage, software encode, HLS output and probe parity, and only reports whether VideoToolbox encodes there. VideoToolbox decode, `h264_videotoolbox` and `scale_vt` need a check on an Apple Silicon Mac.
+**macOS on real hardware is not verified by this repository.** GitHub's macOS runners are virtual machines with a paravirtualized Apple GPU. The workflow checks the macOS build's components, linkage, software encode, HLS output and probe parity there, and reports (without failing the run) whether `h264_videotoolbox` encodes, Igloo's `scale_vt` HDR capability chain runs and `-hwaccel videotoolbox` decodes. All three worked on the runner when the macOS build was added. Playback through Igloo on an Apple Silicon Mac has not been tried.
 
 To run Igloo's server test suite on a local build before it is released, point `IGLOO_FFMPEG_PATH` and `IGLOO_FFPROBE_PATH` at `out/linux_amd64/`. Also put a directory of `ffmpeg`/`ffprobe` symlinks first on `PATH`, because the Makefile checks for both commands on `PATH`.
 
