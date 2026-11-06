@@ -131,7 +131,8 @@ jobs:
             -f lavfi -i testsrc2=s=256x144:d=0.1 -frames:v 1 \
             -vf setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,format=p010le,hwupload,scale_vt=w=-2:h=144:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709 \
             -c:v h264_videotoolbox -profile:v high -f null - && echo "scale_vt HDR chain: works"
-          "$out/ffmpeg" -hide_banner -v error -hwaccel videotoolbox -i "$RUNNER_TEMP/smoke.mp4" -f null - \
+          "$out/ffmpeg" -hide_banner -v error -hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld \
+            -i "$RUNNER_TEMP/smoke.mp4" -f null - \
             && echo "videotoolbox decode: works"
 
       - name: Stage release files
