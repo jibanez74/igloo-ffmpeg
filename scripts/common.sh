@@ -36,7 +36,7 @@ lock_field() {
 
 # fetch <name>: makes sure $CACHE holds the verified source tarball and prints its path.
 fetch() {
-  local name=$1 kind ref sha url tarball tmp
+  local name=$1 kind ref sha url tarball tmp attempt
   kind=$(lock_field "$name" 2)
   ref=$(lock_field "$name" 3)
   sha=$(lock_field "$name" 4)
@@ -44,8 +44,14 @@ fetch() {
   if [[ $kind == tar ]]; then
     tarball=$CACHE/$(basename "$url")
     if [[ ! -f $tarball ]]; then
-      # --retry alone skips connection failures, which is how ffmpeg.org fails.
-      curl -fsSL --connect-timeout 30 --retry 5 --retry-all-errors -o "$tarball.part" "$url" >&2
+      # Retry every failure: curl's own --retry skips connection failures,
+      # which is how ffmpeg.org fails, and the image's curl predates
+      # --retry-all-errors.
+      for attempt in 1 2 3 4 5; do
+        curl -fsSL --connect-timeout 30 -o "$tarball.part" "$url" >&2 && break
+        (( attempt < 5 )) || die "$name: download failed: $url"
+        sleep $((attempt * 10))
+      done
       mv "$tarball.part" "$tarball"
     fi
     [[ $(sha256 "$tarball" | cut -d' ' -f1) == "$sha" ]] || die "$name: sha256 mismatch for $tarball"
