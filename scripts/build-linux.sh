@@ -22,8 +22,8 @@ ln -sf "$(g++ -print-file-name=libstdc++.a)" "$PREFIX/lib/libstdc++.a"
 # The compilers that build the dependencies; the image digest covers the rest.
 toolchain_id() {
   grep -m1 '^FROM ' "$B/Dockerfile"
-  gcc --version | head -1
-  clang --version | head -1
+  gcc --version | sed -n 1p
+  clang --version | sed -n 1p
 }
 
 # The stubbed libdrm and libva also depend on gen_implib and Implib.so's ref.
@@ -109,8 +109,8 @@ build_ffmpeg \
 
 toolchain_info() {
   echo "base image: $(grep -m1 '^FROM ' "$B/Dockerfile" | cut -d' ' -f2)"
-  gcc --version | head -1
-  clang --version | head -1
+  gcc --version | sed -n 1p
+  clang --version | sed -n 1p
   rpm -q gcc-toolset-15-gcc gcc-toolset-15-binutils clang nasm cmake
   echo "meson $(meson --version), ninja $(ninja --version)"
 }

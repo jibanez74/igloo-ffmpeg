@@ -32,7 +32,7 @@ export LDFLAGS="-L$PREFIX/lib $LDFLAGS"
 
 # Xcode's clang and SDK build the dependencies: a new Xcode rebuilds them.
 toolchain_id() {
-  clang --version | head -1
+  clang --version | sed -n 1p
   xcrun --show-sdk-path
   xcrun --show-sdk-build-version
 }
@@ -62,9 +62,9 @@ toolchain_info() {
   sw_vers | tr '\t' ' '
   xcodebuild -version 2> /dev/null | tr '\n' ' ' && echo
   echo "SDK $(xcrun --show-sdk-version)"
-  clang --version | head -1
+  clang --version | sed -n 1p
   echo "deployment target $MACOSX_DEPLOYMENT_TARGET"
   echo "meson $(meson --version), ninja $(ninja --version)"
-  echo "$("$TAR" --version | head -1); $(autoconf --version | head -1); $(automake --version | head -1); $("$LIBTOOLIZE" --version | head -1)"
+  echo "$("$TAR" --version | sed -n 1p); $(autoconf --version | sed -n 1p); $(automake --version | sed -n 1p); $("$LIBTOOLIZE" --version | sed -n 1p)"
 }
 SOURCE_BUNDLE=0 package

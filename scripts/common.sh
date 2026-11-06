@@ -320,7 +320,7 @@ package() {
   {
     echo "Igloo FFmpeg build, $PLATFORM"
     echo
-    "$OUT/ffmpeg" -hide_banner -version | head -1
+    "$OUT/ffmpeg" -hide_banner -version | sed -n 1p
     echo
     echo "## Toolchain"
     toolchain_info
