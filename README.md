@@ -1,14 +1,18 @@
-# Igloo FFmpeg build
+# igloo-ffmpeg
 
-This recipe builds Igloo's own `ffmpeg` and `ffprobe` for Linux x64. Igloo's Linux release binaries embed them, and CI runs the server tests against them. macOS ARM64 still embeds Jellyfin's portable build.
+This repository builds the `ffmpeg` and `ffprobe` that [Igloo](https://github.com/jibanez74/Igloo) uses on Linux x64. Igloo's Linux release binaries embed them, and Igloo's CI runs the server tests against them. On macOS ARM64, Igloo still embeds Jellyfin's portable build.
 
-[`payloads.lock`](payloads.lock) pins every embedded payload, for both platforms, by download URL and sha256. `make media-payloads` runs [`fetch-payloads.sh`](fetch-payloads.sh), which installs the current platform's pair under `server/cmd/internal/{ffmpeg,ffprobe}/` and refuses a file that does not match its pin. `make build` runs it first. `make media-bin` also links the pair as `ffmpeg` and `ffprobe` in `server/dist/media-bin/`, for `PATH`.
+## Used by Igloo
+
+Igloo pins each release here by download URL and sha256 in [`media-payloads/payloads.lock`](https://github.com/jibanez74/Igloo/blob/dev/media-payloads/payloads.lock). Its `make media-payloads` downloads the current platform's pair, installs it under `server/cmd/internal/{ffmpeg,ffprobe}/`, and refuses a file that does not match its pin. `make build` runs it first, and `make media-bin` also links the pair as `ffmpeg` and `ffprobe` in `server/dist/media-bin/`, for `PATH`.
+
+Paths below that start with `server/` or name `make` targets are in the Igloo repository.
 
 ## Build
 
 ```bash
-media-build/build.sh          # needs only Docker; JOBS=<n> limits parallelism
-media-build/build.sh --clean  # rebuild everything except the source cache
+./build.sh          # needs only Docker; JOBS=<n> limits parallelism
+./build.sh --clean  # rebuild everything except the source cache
 ```
 
 The build writes `out/linux_amd64/` with these files:
@@ -25,7 +29,7 @@ The build is reproducible: a clean build on a workstation and one on a GitHub ru
 
 ## Release
 
-[`.github/workflows/media-build.yml`](../.github/workflows/media-build.yml) builds and checks the recipe on every push that changes it. Its run keeps the files as a workflow artifact for 14 days. Pushing a tag named `media-<FFmpeg version>-igloo.<n>`, such as `media-8.1.3-igloo.1`, also publishes them as a GitHub release:
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds and checks the recipe on every push and pull request that changes it. Its run keeps the files as a workflow artifact for 14 days. Pushing a tag named `media-<FFmpeg version>-igloo.<n>`, such as `media-8.1.3-igloo.1`, also publishes them as a GitHub release:
 
 | Release file | Contents |
 | --- | --- |
@@ -68,7 +72,7 @@ The workflow refuses a tag whose FFmpeg version differs from `sources.lock`. A r
 
 ## Vendored patches
 
-`patches/` holds Jellyfin's CUDA tone-mapping filter, `tonemap_cuda`. Igloo's NVIDIA HDR chain uses it (`server/cmd/internal/ffmpeg/ffmpeg_hls.go`), and upstream FFmpeg has no equivalent. Patches 0002 to 0004 come from [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) tag `v8.1.3-1`, `debian/patches/` (still unchanged at `v8.1.3-2`). Patch 0005 is Igloo's own and fixes bugs in them, so 0002 to 0004 stay byte-identical to Jellyfin's:
+`patches/` holds Jellyfin's CUDA tone-mapping filter, `tonemap_cuda`. Igloo's NVIDIA HDR chain uses it ([`server/cmd/internal/ffmpeg/ffmpeg_hls.go`](https://github.com/jibanez74/Igloo/blob/dev/server/cmd/internal/ffmpeg/ffmpeg_hls.go)), and upstream FFmpeg has no equivalent. Patches 0002 to 0004 come from [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) tag `v8.1.3-1`, `debian/patches/` (still unchanged at `v8.1.3-2`). Patch 0005 is Igloo's own and fixes bugs in them, so 0002 to 0004 stay byte-identical to Jellyfin's:
 
 | File | Source | sha256 |
 | --- | --- | --- |
@@ -82,9 +86,9 @@ Like the files they patch, all four are FFmpeg code under the LGPL. The build ap
 ## Verify
 
 ```bash
-python3 -I media-build/verify/check-features.py media-build/verify/required-features.txt \
-  media-build/out/linux_amd64/ffmpeg server/cmd/internal/ffmpeg/ffmpeg_linux_amd64
-python3 -I media-build/verify/ffprobe-parity.py <reference ffprobe> media-build/out/linux_amd64/ffprobe \
+python3 -I verify/check-features.py verify/required-features.txt \
+  out/linux_amd64/ffmpeg <reference ffmpeg, e.g. Igloo's server/cmd/internal/ffmpeg/ffmpeg_linux_amd64>
+python3 -I verify/ffprobe-parity.py <reference ffprobe> out/linux_amd64/ffprobe \
   <report.json> <media dir>...
 ```
 
@@ -93,7 +97,7 @@ python3 -I media-build/verify/ffprobe-parity.py <reference ffprobe> media-build/
 - `check-linkage.sh` fails when a binary links anything outside glibc or needs a glibc newer than 2.28.
 - `nvidia-parity.sh` runs on a host with an NVIDIA GPU. It runs Igloo's NVENC and CUDA capability probes, then times its SDR (`scale_cuda`) and HDR (`tonemap_cuda`) session chains with both builds and samples each one's picture. It stops if NVENC does not open, and it skips the benchmarks while NVENC is in use.
 
-To run the server test suite on a local build before it is released, point `IGLOO_FFMPEG_PATH` and `IGLOO_FFPROBE_PATH` at `out/linux_amd64/`. Also put a directory of `ffmpeg`/`ffprobe` symlinks first on `PATH`, because the Makefile checks for both commands on `PATH`.
+To run Igloo's server test suite on a local build before it is released, point `IGLOO_FFMPEG_PATH` and `IGLOO_FFPROBE_PATH` at `out/linux_amd64/`. Also put a directory of `ffmpeg`/`ffprobe` symlinks first on `PATH`, because the Makefile checks for both commands on `PATH`.
 
 ## Bumping
 
@@ -105,6 +109,10 @@ To run the server test suite on a local build before it is released, point `IGLO
 
    The key is FFmpeg's release key, fingerprint `FCF9 86EA 15E6 E293 A564 4F10 B432 2F04 D676 58D8`, from <https://ffmpeg.org/ffmpeg-devel.asc>.
 2. Refresh 0002 to 0004 in `patches/` from the jellyfin-ffmpeg tag for the same upstream release, and update the table above. Then check that 0005 still applies; if Jellyfin changed the code it touches, regenerate it against the new tree, or drop the fixes Jellyfin made itself.
-3. Rebuild, then run the verify scripts and `make check` against the new build. On a host with an NVIDIA GPU, run `nvidia-parity.sh` with the previous release as the reference.
+3. Rebuild, then run the verify scripts here and Igloo's `make check` against the new build. On a host with an NVIDIA GPU, run `nvidia-parity.sh` with the previous release as the reference.
 4. Commit, push, and push the next `media-<version>-igloo.<n>` tag. The workflow publishes the release.
-5. Point the Linux lines of `payloads.lock` at the new release and its sha256s, which match `SHA256SUMS`. Then run `make media-payloads` and `make check`, and update the version references in `docs/ffmpeg.md` and `THIRD_PARTY_NOTICES.md`.
+5. In Igloo, point the Linux lines of `media-payloads/payloads.lock` at the new release and its sha256s, which match `SHA256SUMS`. Then run `make media-payloads` and `make check`, and update the version references in `docs/ffmpeg.md` and `THIRD_PARTY_NOTICES.md`.
+
+## License
+
+The build scripts, verify scripts and workflow in this repository are under the GNU General Public License version 3 ([`LICENSE`](LICENSE)), like Igloo. The patches are FFmpeg code under the LGPL, as described above. The binaries enable GPL components, so the released executables are under the GPL version 2 or later; each release carries their complete corresponding source.

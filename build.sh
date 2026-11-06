@@ -2,12 +2,12 @@
 # Builds Igloo's ffmpeg and ffprobe for linux_amd64 inside the pinned toolchain
 # container. Needs only Docker on the host. Output lands in out/linux_amd64/.
 #
-#   media-build/build.sh           reuse cached sources and finished dependencies
-#   media-build/build.sh --clean   rebuild everything except the source cache
+#   ./build.sh           reuse cached sources and finished dependencies
+#   ./build.sh --clean   rebuild everything except the source cache
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-image=igloo-media-build:linux_amd64
+image=igloo-ffmpeg-build:linux_amd64
 
 if [[ ${1:-} == --clean ]]; then
   rm -rf "$root/work" "$root/out/linux_amd64"

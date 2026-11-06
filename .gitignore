@@ -1,0 +1,4 @@
+# Download cache, build tree and outputs of build.sh
+/cache/
+/work/
+/out/

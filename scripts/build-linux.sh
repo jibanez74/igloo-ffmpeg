@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs inside the media-build container (see ../Dockerfile and ../build.sh):
+# Runs inside the build container (see ../Dockerfile and ../build.sh):
 # fetches and verifies the sources in ../sources.lock, builds the static
 # dependencies, applies ../patches to FFmpeg, and writes out/linux_amd64/.
 set -euo pipefail
