@@ -1,8 +1,9 @@
 name: Build
 
-# Builds Igloo's ffmpeg and ffprobe and checks them. Pushing a
-# media-<FFmpeg version>-igloo.<n> tag also publishes them as a GitHub release,
-# which Igloo's media-payloads/payloads.lock then pins for `make media-payloads`.
+# Builds Igloo's ffmpeg and ffprobe for Linux x64 and macOS ARM64 and checks
+# them. Pushing a media-<FFmpeg version>-igloo.<n> tag also publishes them as
+# a GitHub release, which Igloo's media-payloads/payloads.lock then pins for
+# `make media-payloads`.
 on:
   push:
     branches: ['**']
@@ -26,13 +27,23 @@ jobs:
         with:
           persist-credentials: false
 
+      # The verified source downloads (cache/), so a build does not depend on
+      # ffmpeg.org and the git hosts answering. The build checks the FFmpeg
+      # tarball's sha256 on every use.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: cache
+          key: sources-${{ runner.os }}-${{ hashFiles('sources.lock') }}
+
       - name: Build
+        # A full build takes about 10 minutes; a hung download fails here.
+        timeout-minutes: 45
         run: ./build.sh
 
       - name: Check components and linkage
         run: |
           out=out/linux_amd64
-          python3 -I verify/check-features.py verify/required-features.txt "$out/ffmpeg"
+          python3 -I verify/check-features.py --platform linux verify/required-features.txt "$out/ffmpeg"
           verify/check-linkage.sh "$out/ffmpeg" "$out/ffprobe"
 
       - name: Smoke test
@@ -45,16 +56,12 @@ jobs:
 
       - name: Stage release files
         run: |
-          out=out
           mkdir release
-          cp "$out/linux_amd64/ffmpeg" release/ffmpeg_linux_amd64
-          cp "$out/linux_amd64/ffprobe" release/ffprobe_linux_amd64
-          cp "$out/linux_amd64/BUILDINFO" release/BUILDINFO_linux_amd64
-          cp "$out"/igloo-ffmpeg-*-sources.tar release/
-          cd release
-          files=(*)
-          sha256sum "${files[@]}" > SHA256SUMS
-          cat SHA256SUMS
+          cp out/linux_amd64/ffmpeg release/ffmpeg_linux_amd64
+          cp out/linux_amd64/ffprobe release/ffprobe_linux_amd64
+          cp out/linux_amd64/BUILDINFO release/BUILDINFO_linux_amd64
+          cp out/igloo-ffmpeg-*-sources.tar release/
+          (cd release && sha256sum -- *)
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -63,8 +70,110 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  darwin-arm64:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      # Pinned so a runner-image update cannot change the toolchain unnoticed.
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      # The previous macOS payload (Jellyfin 8.1.3-1), the parity reference.
+      REFERENCE_URL: https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_macarm64-gpl.tar.xz
+      REFERENCE_FFPROBE_SHA256: 6e5f60f7387917b33e3c4dfdf1e2d13cc63a1e928c0ac75c4f0dcd89f1c2a90d
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install build tools
+        run: |
+          brew install bash gnu-tar xz autoconf automake libtool pkgconf
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --no-cache-dir meson==1.12.1 ninja==1.13.2
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+
+      # The verified source downloads (cache/), so a build does not depend on
+      # ffmpeg.org and the git hosts answering. The build checks the FFmpeg
+      # tarball's sha256 on every use.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: cache
+          key: sources-${{ runner.os }}-${{ hashFiles('sources.lock') }}
+
+      - name: Build
+        # A full build takes about 10 minutes; a hung download fails here.
+        timeout-minutes: 45
+        run: ./build.sh
+
+      - name: Check components and linkage
+        run: |
+          out=out/darwin_arm64
+          python3 -I verify/check-features.py --platform darwin verify/required-features.txt "$out/ffmpeg"
+          verify/check-linkage-macos.sh "$out/ffmpeg" "$out/ffprobe"
+
+      - name: Smoke test
+        run: |
+          out=out/darwin_arm64
+          "$out/ffmpeg" -hide_banner -version | head -1
+          "$out/ffmpeg" -hide_banner -v error -f lavfi -i testsrc2=s=320x240:d=1 -f lavfi -i sine=d=1 \
+            -c:v libx264 -c:a aac -f mp4 "$RUNNER_TEMP/smoke.mp4"
+          "$out/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 "$RUNNER_TEMP/smoke.mp4"
+          # Igloo's CPU HLS shape: fMP4 segments with forced keyframes
+          mkdir "$RUNNER_TEMP/hls"
+          "$out/ffmpeg" -hide_banner -v error -f lavfi -i testsrc2=s=640x360:r=24:d=8 -f lavfi -i sine=d=8 \
+            -c:v libx264 -preset veryfast -force_key_frames 'expr:gte(t,n_forced*4)' -c:a aac -ac 2 \
+            -f hls -hls_time 4 -hls_segment_type fmp4 -hls_playlist_type vod "$RUNNER_TEMP/hls/index.m3u8"
+          ls "$RUNNER_TEMP/hls"
+
+      - name: Probe parity with the previous macOS payload
+        run: |
+          ref=$RUNNER_TEMP/reference
+          mkdir "$ref"
+          curl -fsSL --connect-timeout 30 --retry 5 --retry-all-errors "$REFERENCE_URL" | tar -xJf - -C "$ref"
+          [[ $(shasum -a 256 "$ref/ffprobe" | cut -d' ' -f1) == "$REFERENCE_FFPROBE_SHA256" ]]
+          verify/make-fixtures.sh out/darwin_arm64/ffmpeg "$RUNNER_TEMP/fixtures"
+          python3 -I verify/ffprobe-parity.py "$ref/ffprobe" out/darwin_arm64/ffprobe \
+            "$RUNNER_TEMP/parity.json" "$RUNNER_TEMP/fixtures"
+          cat "$RUNNER_TEMP/parity.json"
+
+      # GitHub's macOS runners are virtual machines, which may not expose
+      # VideoToolbox the way a Mac does, so this step only reports what it
+      # finds: H.264 encode, Igloo's Apple HDR capability probe
+      # (probeAppleVTTonemap in capabilities.go), and hwaccel decode.
+      - name: VideoToolbox (informational)
+        continue-on-error: true
+        run: |
+          out=out/darwin_arm64
+          "$out/ffmpeg" -hide_banner -hwaccels
+          "$out/ffmpeg" -hide_banner -v error -f lavfi -i testsrc2=s=320x240:d=1 \
+            -c:v h264_videotoolbox -f null - && echo "h264_videotoolbox: encodes"
+          "$out/ffmpeg" -hide_banner -v error -init_hw_device videotoolbox=igloo_vt -filter_hw_device igloo_vt \
+            -f lavfi -i testsrc2=s=256x144:d=0.1 -frames:v 1 \
+            -vf setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,format=p010le,hwupload,scale_vt=w=-2:h=144:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709 \
+            -c:v h264_videotoolbox -profile:v high -f null - && echo "scale_vt HDR chain: works"
+          # A failed hwaccel falls back to software and still exits 0, so the
+          # decoder's own report of the format it chose is the evidence.
+          "$out/ffmpeg" -hide_banner -v debug -hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld \
+            -i "$RUNNER_TEMP/smoke.mp4" -f null - 2>&1 | grep -q 'Format videotoolbox_vld chosen by get_format' \
+            && echo "videotoolbox decode: works"
+
+      - name: Stage release files
+        run: |
+          mkdir release
+          cp out/darwin_arm64/ffmpeg release/ffmpeg_darwin_arm64
+          cp out/darwin_arm64/ffprobe release/ffprobe_darwin_arm64
+          cp out/darwin_arm64/BUILDINFO release/BUILDINFO_darwin_arm64
+          (cd release && shasum -a 256 -- *)
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: media-darwin_arm64
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
-    needs: linux-amd64
+    needs: [linux-amd64, darwin-arm64]
     if: startsWith(github.ref, 'refs/tags/media-')
     runs-on: ubuntu-24.04
     permissions:
@@ -76,7 +185,8 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: media-linux_amd64
+          pattern: media-*
+          merge-multiple: true
           path: release
 
       - name: Publish the release
@@ -89,15 +199,16 @@ jobs:
             echo "::error::$TAG does not name FFmpeg $version, the version in sources.lock"
             exit 1
           fi
-          (cd release && sha256sum -c SHA256SUMS)
+          (cd release && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
           cat > "$RUNNER_TEMP/notes.md" <<EOF
-          FFmpeg $version built by [igloo-ffmpeg](https://github.com/$GITHUB_REPOSITORY/tree/$GITHUB_SHA) for Igloo's Linux x64 release binaries, from commit $GITHUB_SHA.
+          FFmpeg $version built by [igloo-ffmpeg](https://github.com/$GITHUB_REPOSITORY/tree/$GITHUB_SHA) for Igloo's release binaries, from commit $GITHUB_SHA.
 
           | File | Contents |
           | --- | --- |
-          | \`ffmpeg_linux_amd64\`, \`ffprobe_linux_amd64\` | Executables. Everything but glibc is linked in, and they need glibc 2.28 or newer. |
-          | \`BUILDINFO_linux_amd64\` | Toolchain, configure line, source pins and patch digests |
-          | \`igloo-ffmpeg-$version-sources.tar\` | Corresponding source under the GPL: every source tarball, the patches and the build recipe |
+          | \`ffmpeg_linux_amd64\`, \`ffprobe_linux_amd64\` | Linux x64 executables. Everything but glibc is linked in, and they need glibc 2.28 or newer. |
+          | \`ffmpeg_darwin_arm64\`, \`ffprobe_darwin_arm64\` | macOS ARM64 executables, signed ad hoc. Only system libraries and frameworks are linked dynamically, and they need macOS 12 or newer. |
+          | \`BUILDINFO_<platform>\` | Toolchain, configure line, source pins and patch digests |
+          | \`igloo-ffmpeg-$version-sources.tar\` | Corresponding source under the GPL for both platforms: every source tarball, the patches and the build recipe |
           | \`SHA256SUMS\` | Checksums of the files above |
 
           Igloo's \`make media-payloads\` installs the executables after checking them against [\`media-payloads/payloads.lock\`](https://github.com/jibanez74/Igloo/blob/dev/media-payloads/payloads.lock).

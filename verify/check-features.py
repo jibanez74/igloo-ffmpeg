@@ -1,13 +1,17 @@
 """Check an ffmpeg build against required-features.txt, optionally diffing it
-against a reference build (for example the Jellyfin payload).
+against a reference build (for example the previous release).
 
-    python3 -I check-features.py required-features.txt <ffmpeg> [<reference ffmpeg>]
+    python3 -I check-features.py [--platform <p>] required-features.txt <ffmpeg> [<reference ffmpeg>]
 
+A line in required-features.txt may end in a platform (linux, darwin); it is
+then required only on that platform. --platform defaults to the host's.
 Exits 1 when a required component is missing.
 """
 
 import subprocess
 import sys
+
+PLATFORMS = ("linux", "darwin")
 
 # kind -> ffmpeg list option
 LISTS = {
@@ -66,10 +70,16 @@ def inventory(ffmpeg):
 
 
 def main():
-    if len(sys.argv) not in (3, 4):
+    args = sys.argv[1:]
+    platform = "darwin" if sys.platform == "darwin" else "linux"
+    if args[:1] == ["--platform"]:
+        if len(args) < 2 or args[1] not in PLATFORMS:
+            sys.exit(f"--platform takes one of {', '.join(PLATFORMS)}")
+        platform, args = args[1], args[2:]
+    if len(args) not in (2, 3):
         sys.exit(__doc__)
-    required_file, candidate = sys.argv[1], sys.argv[2]
-    reference = sys.argv[3] if len(sys.argv) == 4 else None
+    required_file, candidate = args[0], args[1]
+    reference = args[2] if len(args) == 3 else None
 
     have = inventory(candidate)
     missing = []
@@ -78,9 +88,14 @@ def main():
             line = line.split("#", 1)[0].strip()
             if not line:
                 continue
-            kind, name = line.split()
+            fields = line.split()
+            if len(fields) not in (2, 3) or (len(fields) == 3 and fields[2] not in PLATFORMS):
+                sys.exit(f"bad line {line!r} in {required_file}")
+            kind, name = fields[:2]
             if kind not in LISTS:
                 sys.exit(f"unknown kind {kind!r} in {required_file}")
+            if len(fields) == 3 and fields[2] != platform:
+                continue
             if name not in have[kind]:
                 missing.append(f"{kind} {name}")
 
@@ -100,7 +115,7 @@ def main():
         for item in missing:
             print(f"  {item}")
         sys.exit(1)
-    print("all required components present")
+    print(f"all required {platform} components present")
 
 
 if __name__ == "__main__":
